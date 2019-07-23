@@ -60,7 +60,7 @@ object JobManagerSpec extends Specification {
       val (submitResult, ids, status) = (for {
         mgr <- mkJobManager
         ref <- Stream.eval(SignallingRef[IO, String]("Not started"))
-        submitResult <- Stream.eval(mgr.submit(Job(JobId, jobStream(ref))))
+        submitResult <- Stream.eval(mgr.submit(Job.reportAll(JobId, jobStream(ref))))
         _ <- latchGet(ref, "Started")
         ids <- Stream.eval(mgr.jobIds)
         status <- Stream.eval(mgr.status(JobId))
@@ -80,7 +80,7 @@ object JobManagerSpec extends Specification {
       val (refAfterStart, refAfterRun) = (for {
         mgr <- mkJobManager
         ref <- Stream.eval(SignallingRef[IO, String]("Not started"))
-        job = Job[IO, Int, String, Int](JobId, jobStream(ref))
+        job = Job.reportAll(JobId, jobStream(ref))
 
         submitStatus <- Stream.eval(mgr.submit(job))
         _ <- latchGet(ref, "Started")
@@ -103,7 +103,7 @@ object JobManagerSpec extends Specification {
       val (statusBeforeCancel, refBeforeCancel, refAfterCancel) = (for {
         mgr <- mkJobManager
         ref <- Stream.eval(SignallingRef[IO, String]("Not started"))
-        job = Job(JobId, jobStream(ref))
+        job = Job.reportAll(JobId, jobStream(ref))
 
         _ <- Stream.eval(mgr.submit(job))
         _ <- latchGet(ref, "Started")
@@ -132,7 +132,7 @@ object JobManagerSpec extends Specification {
 
       val ns = (for {
         mgr <- mkJobManager
-        submitStatus <- Stream.eval(mgr.submit(Job(JobId, jobStream)))
+        submitStatus <- Stream.eval(mgr.submit(Job.reportAll(JobId, jobStream)))
         _ <- await
 
         // folds keeps pulling and blocks, even after the stream is done emitting
@@ -153,7 +153,7 @@ object JobManagerSpec extends Specification {
       val results = (for {
         mgr <- mkJobManager
         ref <- Stream.eval(SignallingRef[IO, String]("Not started"))
-        tappedStream = mgr.tap(Job(JobId, jobStream(ref))).fold(List[Int]()) {
+        tappedStream = mgr.tap(Job.reportAll(JobId, jobStream(ref))).fold(List[Int]()) {
           case (acc, elem) => acc :+ elem
         }
         // sequence tapped stream manually
@@ -174,8 +174,8 @@ object JobManagerSpec extends Specification {
       val results = (for {
         mgr <- mkJobManager
         ref <- Stream.eval(SignallingRef[IO, String]("Not started"))
-        _ <- Stream.eval(mgr.submit(Job(1, jobStream(ref))))
-        _ <- Stream.eval(mgr.submit(Job(2, failingJobStream)))
+        _ <- Stream.eval(mgr.submit(Job.reportAll(1, jobStream(ref))))
+        _ <- Stream.eval(mgr.submit(Job.reportAll(2, failingJobStream)))
         _ <- latchGet(ref, "Finished")
         results <- Stream.eval(ref.get)
       } yield results).compile.lastOrError.timeout(Timeout).unsafeRunSync
@@ -193,9 +193,9 @@ object JobManagerSpec extends Specification {
       val results = (for {
         mgr <- mkJobManager
         ref <- Stream.eval(SignallingRef[IO, String]("Not started"))
-        _ <- Stream.eval(mgr.submit(Job(1, jobStream(ref))))
+        _ <- Stream.eval(mgr.submit(Job.reportAll(1, jobStream(ref))))
         // boom
-        _ <- mgr.tap(Job(2, failingJobStream))
+        _ <- mgr.tap(Job.reportAll(2, failingJobStream))
         _ <- latchGet(ref, "Finished")
         results <- Stream.eval(ref.get)
       } yield results).compile.lastOrError.timeout(Timeout).unsafeRunSync
@@ -212,7 +212,7 @@ object JobManagerSpec extends Specification {
       val event = (for {
         mgr <- mkJobManager
         ref <- Stream.eval(SignallingRef[IO, String]("Not started"))
-        _ <- Stream.eval(mgr.submit(Job(JobId, jobStream(ref))))
+        _ <- Stream.eval(mgr.submit(Job.reportAll(JobId, jobStream(ref))))
         _ <- latchGet(ref, "Started")
         event <- mgr.events.take(1)
       } yield event).compile.lastOrError.timeout(Timeout).unsafeRunSync
@@ -234,7 +234,7 @@ object JobManagerSpec extends Specification {
       val event = (for {
         mgr <- mkJobManager
         ref <- Stream.eval(SignallingRef[IO, String]("Not started"))
-        _ <- Stream.eval(mgr.submit(Job(JobId, jobStream(ref))))
+        _ <- Stream.eval(mgr.submit(Job.reportAll(JobId, jobStream(ref))))
         _ <- latchGet(ref, "Finished")
         event <- mgr.events.take(1)
       } yield event).compile.lastOrError.timeout(Timeout).unsafeRunSync
@@ -257,8 +257,8 @@ object JobManagerSpec extends Specification {
       val events = (for {
         mgr <- mkJobManager
         ref <- Stream.eval(SignallingRef[IO, String]("Not started"))
-        _ <- Stream.eval(mgr.submit(Job(JobId, jobStream(ref))))
-        _ <- Stream.eval(mgr.submit(Job(FailingJobId, failingJobStream)))
+        _ <- Stream.eval(mgr.submit(Job.reportAll(JobId, jobStream(ref))))
+        _ <- Stream.eval(mgr.submit(Job.reportAll(FailingJobId, failingJobStream)))
         _ <- latchGet(ref, "Finished")
         events <- mgr.events.take(2).fold(List[Event[Int]]()) {
           case (acc, elem) => acc :+ elem
@@ -286,7 +286,7 @@ object JobManagerSpec extends Specification {
       val (startTime, endTime, event) = (for {
         mgr <- mkJobManager
         ref <- Stream.eval(SignallingRef[IO, String]("Not started"))
-        _ <- Stream.eval(mgr.submit(Job(JobId, jobStream(ref))))
+        _ <- Stream.eval(mgr.submit(Job.reportAll(JobId, jobStream(ref))))
         _ <- latchGet(ref, "Started")
         startTime <- Stream.eval(IO(OffsetDateTime.now()))
         _ <- latchGet(ref, "Working")
@@ -311,7 +311,7 @@ object JobManagerSpec extends Specification {
       val (startTime, endTime, event) = (for {
         mgr <- mkJobManager
         ref <- Stream.eval(SignallingRef[IO, String]("Not started"))
-        _ <- Stream.eval(mgr.submit(Job(JobId, jobStream(ref))))
+        _ <- Stream.eval(mgr.submit(Job.reportAll(JobId, jobStream(ref))))
         _ <- latchGet(ref, "Started")
         startTime <- Stream.eval(IO(OffsetDateTime.now()))
         _ <- latchGet(ref, "Finished")
@@ -336,13 +336,13 @@ object JobManagerSpec extends Specification {
         ref <- Stream.eval(SignallingRef[IO, String]("Not started"))
 
         // submit job once
-        _ <- Stream.eval(mgr.submit(Job(1, jobStream(ref))))
+        _ <- Stream.eval(mgr.submit(Job.reportAll(1, jobStream(ref))))
         _ <- latchGet(ref, "Finished")
 
         ref2 <- Stream.eval(SignallingRef[IO, String]("Not started"))
 
         // submit again to fill event queue
-        _ <- Stream.eval(mgr.submit(Job(2, jobStream(ref2))))
+        _ <- Stream.eval(mgr.submit(Job.reportAll(2, jobStream(ref2))))
         _ <- latchGet(ref2, "Finished")
       } yield ()).compile.lastOrError.timeout(Timeout).unsafeRunSync
 
@@ -360,13 +360,36 @@ object JobManagerSpec extends Specification {
         // notificationsLimit = 2
         mgr <- JobManager[IO, Int, String](10, 2, 10)
         ref <- Stream.eval(SignallingRef[IO, String]("Not started"))
-        _ <- Stream.eval(mgr.submit(Job(JobId, jobStream(ref))))
+        _ <- Stream.eval(mgr.submit(Job.reportAll(JobId, jobStream(ref))))
         _ <- latchGet(ref, "Finished")
       } yield ()).compile.lastOrError.timeout(Timeout).unsafeRunSync
 
       ok
     }
+
+    "report only notifications indicated by reportOn" in {
+      def jobStream(ref: SignallingRef[IO, String]) =
+        Stream.eval(ref.set("Started")).as(Right(1)) ++ Stream.emit(Left("50%")).covary[IO] ++ await.as(Right(2)) ++ Stream.emit(Left("100%")).covary[IO] ++ Stream.eval(ref.set("Finished")).as(Right(3))
+
+      val ns = (for {
+        mgr <- mkJobManager
+        ref1 <- Stream.eval(SignallingRef[IO, String]("Not started"))
+        ref2 <- Stream.eval(SignallingRef[IO, String]("Not started"))
+        _ <- Stream.eval(mgr.submit(Job.unreported(1, jobStream(ref1))))
+        _ <- Stream.eval(mgr.submit(Job.reportAll(2, jobStream(ref2))))
+        _ <- latchGet(ref1, "Finished")
+        _ <- latchGet(ref2, "Finished")
+        ns <- mgr.notifications.take(2).fold(List[(Int, String)]()) {
+          case (acc, elem) => acc :+ elem
+        }
+      } yield ns).compile.lastOrError.timeout(Timeout).unsafeRunSync
+
+      ns mustEqual List((2, "50%"), (2, "100%"))
+    }
   }
+
+  def runTest[A](s: Stream[IO, A]): A =
+    s.compile.lastOrError.timeout(Timeout).unsafeRunSync
 
   // blocks until s.get === expected
   def latchGet(s: SignallingRef[IO, String], expected: String): Stream[IO, Unit] =

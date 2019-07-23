@@ -67,9 +67,12 @@ final class JobManager[F[_]: Concurrent: Timer, I, N] private (
       .map(_.swap.toOption)
       .unNone
       .tupleLeft(job.id)
-      .map(Some(_))
-      .evalMap(notificationsQ.enqueue1)
-      .drain
+      .evalMap({
+        case (i, n) if job.reportOn(n) =>
+          notificationsQ.enqueue1(Some((i, n)))
+        case (i, n) =>
+          Concurrent[F].unit
+      }).drain
 
     val putStatusF = Concurrent[F] delay {
       val attempt = Context[F](Status.Pending, None)
@@ -227,7 +230,7 @@ object JobManager {
       : Stream[F, JobManager[F, I, N]] = {
 
     for {
-      notificationsQ <- Stream.eval(Queue.circularBuffer[F, Option[(I, N)]](notificationsLimit))
+      notificationsQ <- Stream.eval(Queue.bounded[F, Option[(I, N)]](notificationsLimit))
       eventQ <- Stream.eval(Queue.circularBuffer[F, Option[Event[I]]](eventsLimit))
       dispatchQ <- Stream.eval(Queue.bounded[F, Stream[F, Nothing]](jobLimit))
 
