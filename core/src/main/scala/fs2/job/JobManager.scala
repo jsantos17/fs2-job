@@ -17,6 +17,7 @@
 package fs2
 package job
 
+import cats.syntax.eq._
 import cats.syntax.flatMap._
 import cats.syntax.functor._
 
@@ -68,7 +69,7 @@ final class JobManager[F[_]: Concurrent: Timer, I, N] private (
       .unNone
       .tupleLeft(job.id)
       .evalMap({
-        case (i, n) if job.reportOn(n) =>
+        case (i, n) if job.reportOn(n) === Report.Emit =>
           notificationsQ.enqueue1(Some((i, n)))
         case (i, n) =>
           Concurrent[F].unit
