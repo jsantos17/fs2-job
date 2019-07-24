@@ -17,7 +17,7 @@
 package fs2
 package job
 
-import scala.{Boolean, Product, Serializable}
+import scala.Boolean
 import scala.util.Either
 
 final case class Job[F[_], I, N, R](id: I, run: Stream[F, Either[N, R]], reportOn: N => Boolean)
@@ -28,3 +28,4 @@ object Job {
 
   def reportAll[F[_], I, N, R](id: I, run: Stream[F, Either[N, R]]): Job[F, I, N, R] =
     Job(id, run, (_ => true))
+}
